@@ -7,6 +7,340 @@
 <body>
 <h1>RPG admin panel</h1>
 <h2>Accounts list:</h2>
+<label for="pageSize">Count per page:</label>
+<select id="pageSize">
+    <option value="3" selected>3</option>
+    <option value="5">5</option>
+    <option value="10">10</option>
+    <option value="20">20</option>
+</select>
+
+<table id="playersTable" border="1">
+    <thead>
+    <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Title</th>
+        <th>Race</th>
+        <th>Profession</th>
+        <th>Level</th>
+        <th>Birthday</th>
+        <th>Banned</th>
+    </tr>
+    </thead>
+    <tbody>
+
+    </tbody>
+</table>
+
+<div id="pagination">
+
+</div>
+
+<div id="create-player-section" style="border:thin">
+    <hr />
+    <h3>Create new hero</h3>
+    <div>
+        <label for="new-name">Name:</label>
+        <input type="text" id="new-name" placeholder="1-12 chars" maxlength="12" required />
+    </div>
+    <div>
+        <label for="new-title">Title:</label>
+        <input type="text" id="new-title" placeholder="1-30 chars" maxlength="30" required />
+    </div>
+    <div>
+        <label for="new-race">Race:</label>
+        <select id="new-race">
+            <option value="HUMAN">HUMAN</option>
+            <option value="ORC">ORC</option>
+            <option value="DWARF">DWARF</option>
+            <option value="HOBBIT">HOBBIT</option>
+        </select>
+    </div>
+    <div>
+        <label for="new-profession">Profession:</label>
+        <select id="new-profession">
+            <option value="WARRIOR">WARRIOR</option>
+            <option value="ROGUE">ROGUE</option>
+            <option value="CLERIC">CLERIC</option>
+            <option value="MAGE">MAGE</option>
+        </select>
+    </div>
+    <div>
+        <label for="new-level">Level:</label>
+        <input type="number" id="new-level" min="0" max="100" required />
+    </div>
+    <div>
+        <label for="new-birthday">Birthday:</label>
+        <input type="date" id="new-birthday" required />
+    </div>
+    <div>
+        <label for="new-banned">Banned:</label>
+        <select id="new-banned">
+            <option value="true">true</option>
+            <option value="false" selected>false</option>
+        </select>
+    </div>
+    <button id="create-player-btn">Create</button>
+</div>
+
+
+<script>
+    $(document).ready(function () {
+        let pageSize = 3;
+        let currentPage = 0;
+        let totalRecords = 0;
+
+        // Функція для отримання загальної кількості записів
+        function fetchTotalRecords() {
+            return $.get('/rest/players/count', function (count) {
+                totalRecords = count;
+            });
+        }
+
+        // Функція для отримання гравців
+        function fetchPlayers() {
+            $.get(`/rest/players?pageNumber=${currentPage}&pageSize=${pageSize}`, function (players) {
+                const $tableBody = $('#playersTable tbody');
+                $tableBody.empty();
+
+                players.forEach((player, index) => {
+                    const row = `
+                        <tr>
+                            <td>${player.id}</td>
+                            <td>${player.name}</td>
+                            <td>${player.title}</td>
+                            <td>${player.race}</td>
+                            <td>${player.profession}</td>
+                            <td>${player.level}</td>
+                            <td>${new Date(player.birthday).toLocaleDateString()}</td>
+                            <td>${player.banned}</td>
+                            <td>
+                                <button class="edit-btn" data-id="${player.id}">
+                                    <img src="img/edit.png" alt="Edit" title="Edit">
+                                </button>
+                            </td>
+                            <td>
+                                <button class="delete-btn" data-id="${player.id}">
+                                    <img src="img/delete.png" alt="Delete" title="Delete">
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    $tableBody.append(row);
+                });
+
+                // Create
+
+                $('#create-player-btn').click(function () {
+                    // Збираємо дані з форми
+                    const newPlayer = {
+                        name: $('#new-name').val(),
+                        title: $('#new-title').val(),
+                        race: $('#new-race').val(),
+                        profession: $('#new-profession').val(),
+                        level: parseInt($('#new-level').val(), 10),
+                        birthday: new Date($('#new-birthday').val()).getTime(),
+                        banned: $('#new-banned').val() === 'true'
+                    };
+
+                    // Валідація даних
+                    if (newPlayer.name.length < 1 || newPlayer.name.length > 12) {
+                        alert('Name myst be from 1 to 12 chars!');
+                        return;
+                    }
+                    if (newPlayer.title.length < 1 || newPlayer.title.length > 30) {
+                        alert('Title myst be from 1 to 30 chars!');
+                        return;
+                    }
+                    if (isNaN(newPlayer.level) || newPlayer.level < 0 || newPlayer.level > 100) {
+                        alert('Level must be a num between 0 and 100!');
+                        return;
+                    }
+                    if (!newPlayer.birthday) {
+                        alert('Date in necessary!');
+                        return;
+                    }
+
+                    // Надсилаємо POST запит на сервер
+                    $.ajax({
+                        url: `/rest/players/`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        Accept: 'application/json',
+                        data: JSON.stringify(newPlayer),
+                        success: function () {
+                            alert('New hero created!');
+                            // Оновлюємо список облікових записів
+                            fetchPlayers();
+                        },
+                        error: function (xhr) {
+                            console.log(newPlayer);
+                            console.error('Error response from server:', xhr.responseText);
+                            alert(`Failed to create new hero: ${xhr.responseText}`);
+                        }
+                    });
+                });
+
+
+                //DELETE
+
+                $('.delete-btn').click(function () {
+                    const playerId = $(this).data('id');
+                    deletePlayer(playerId);
+                });
+
+
+                //UPDATE
+                $('.edit-btn').click(function () {
+                    const playerId = $(this).data('id');
+                    const row = $(this).closest('tr');
+
+                    // Отримуємо дані гравця з таблиці
+                    const player = {
+                        id: playerId,
+                        name: row.find('td:nth-child(2)').text(),
+                        title: row.find('td:nth-child(3)').text(),
+                        race: row.find('td:nth-child(4)').text(),
+                        profession: row.find('td:nth-child(5)').text(),
+                        banned: row.find('td:nth-child(8)').text() === 'true'
+                    };
+
+                    enableEditMode(row, player);
+                });
+            }).fail(function (error) {
+                console.error('Error fetching players:', error);
+            });
+        }
+
+
+        function enableEditMode(row, player) {
+            // Приховуємо кнопку Delete
+            row.find('.delete-btn').hide();
+
+            // Змінюємо картинку Edit на Save
+            const editButton = row.find('.edit-btn img');
+            editButton.attr('src', 'img/save-icon.png').attr('alt', 'Save').attr('title', 'Save');
+
+            // Перетворюємо поля в редаговані
+            row.find('td:nth-child(2)').html(`<input type="text" class="edit-name" value="${player.name}" />`);
+            row.find('td:nth-child(3)').html(`<input type="text" class="edit-title" value="${player.title}" />`);
+            row.find('td:nth-child(4)').html(createDropdown(['HUMAN', 'ORC', 'DWARF', 'HOBBIT'], player.race, 'edit-race'));
+            row.find('td:nth-child(5)').html(createDropdown(['WARRIOR', 'ROGUE', 'CLERIC', 'MAGE'], player.profession, 'edit-profession'));
+            row.find('td:nth-child(8)').html(`
+                <select class="edit-banned">
+                    <option value="true" ${player.banned ? 'selected' : ''}>true</option>
+                    <option value="false" ${!player.banned ? 'selected' : ''}>false</option>
+                </select>
+            `);
+
+            // Додаємо обробник для збереження
+            row.find('.edit-btn').off('click').click(function () {
+                saveChanges(row, player.id);
+            });
+        }
+
+        // Функція для створення випадаючого списку
+        function createDropdown(options, selectedValue, className) {
+            let dropdown = `<select class="${className}">`;
+            options.forEach(option => {
+                dropdown += `<option value="${option}" ${option === selectedValue ? 'selected' : ''}>${option}</option>`;
+            });
+            dropdown += '</select>';
+            return dropdown;
+        }
+
+        function saveChanges(row, playerId) {
+            const updatedPlayer = {
+                name: row.find('.edit-name').val(),
+                title: row.find('.edit-title').val(),
+                race: row.find('.edit-race').val(),
+                profession: row.find('.edit-profession').val(),
+                banned: row.find('.edit-banned').val() === 'true'
+            };
+
+            // Надсилаємо PUT запит на сервер
+            $.ajax({
+                url: `/rest/players/${playerId}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(updatedPlayer),
+                success: function () {
+                    alert('Player updated successfully!');
+                    fetchPlayers();
+                },
+                error: function (error) {
+                    console.error('Error updating player:', error);
+                    alert('Failed to update player!');
+                }
+            });
+        }
+
+
+        // Функція для видалення запису
+        function deletePlayer(playerId) {
+            $.ajax({
+                url: `/rest/players/${playerId}`,
+                type: 'DELETE',
+                success: function () {
+                    alert('Player successfully deleted!');
+                    fetchTotalRecords().then(() => {
+                        if (currentPage * pageSize >= totalRecords - 1) {
+                            currentPage = Math.max(currentPage - 1, 0);
+                        }
+                        fetchPlayers();
+                        createPagination();
+                    });
+                },
+                error: function (error) {
+                    console.error('Error deleting player:', error);
+                    alert('Failed to delete player!');
+                }
+            });
+        }
+
+        // Функція для створення кнопок пейджингу
+        function createPagination() {
+            const $pagination = $('#pagination');
+            $pagination.empty();
+
+            const totalPages = Math.ceil(totalRecords / pageSize);
+
+            for (let i = 0; i < totalPages; i++) {
+                const button = `
+                    <button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">
+                        ${i + 1}
+                    </button>
+                `;
+                $pagination.append(button);
+            }
+
+            // Додаємо обробник для кнопок пейджингу
+            $('.page-btn').click(function () {
+                currentPage = $(this).data('page');
+                fetchPlayers();
+                createPagination();
+            });
+        }
+
+        // Ініціалізація
+        function init() {
+            fetchTotalRecords().then(() => {
+                createPagination();
+                fetchPlayers();
+            });
+
+            $('#pageSize').change(function () {
+                pageSize = parseInt($(this).val());
+                currentPage = 0;
+                init();
+            });
+        }
+
+        init();
+    });
+</script>
+
 
 </body>
 </html>
